@@ -60,7 +60,7 @@ export function Sidebar({ isOpen, onClose, activeModule, onModuleChange }: Sideb
       {/* Overlay for mobile */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={onClose}
         />
       )}
@@ -69,7 +69,8 @@ export function Sidebar({ isOpen, onClose, activeModule, onModuleChange }: Sideb
       <div
         className={cn(
           'fixed left-0 top-0 h-full bg-slate-800 border-r border-slate-700 transition-all duration-300 z-50',
-          isOpen ? 'w-64' : 'w-0 lg:w-0',
+          'md:w-64',
+          isOpen ? 'w-64' : 'w-0 md:w-64',
           'overflow-hidden'
         )}
       >
