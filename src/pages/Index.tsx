@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar, ModuleId } from '@/components/dashboard/Sidebar';
 import { Header } from '@/components/dashboard/Header';
@@ -8,9 +9,18 @@ import { AdminPanel } from '@/components/dashboard/AdminPanel';
 import { Loader2 } from 'lucide-react';
 
 const Index = () => {
+  const [searchParams] = useSearchParams();
   const { user, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
+
+  // Handle URL module parameter
+  useEffect(() => {
+    const moduleParam = searchParams.get('module');
+    if (moduleParam && ['dashboard', 'eagles', 'alcateia', 'sharks', 'sdrs', 'reports', 'admin'].includes(moduleParam)) {
+      setActiveModule(moduleParam as ModuleId);
+    }
+  }, [searchParams]);
 
   if (loading) {
     return (
