@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Phone, Target, TrendingUp, DollarSign, Zap, Shield } from 'lucide-react';
+import { Phone, Target, TrendingUp, DollarSign } from 'lucide-react';
 import { MetricCard } from './MetricCard';
 import { SquadSection, SquadSectionLoading } from './SquadSection';
 import { EmptyState } from './EmptyState';
+import { PeriodFilter } from './PeriodFilter';
 import { useTotalMetrics } from '@/hooks/useMetrics';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -11,7 +12,9 @@ import { toast } from 'sonner';
 export function DashboardOverview() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const { totals, squadMetrics, isLoading, error } = useTotalMetrics();
+  const [periodStart, setPeriodStart] = useState<string | undefined>();
+  const [periodEnd, setPeriodEnd] = useState<string | undefined>();
+  const { totals, squadMetrics, isLoading, error } = useTotalMetrics(periodStart, periodEnd);
 
   const handleConnectSheet = () => {
     if (isAdmin) {
@@ -41,9 +44,19 @@ export function DashboardOverview() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Page header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-foreground">Dashboard Geral</h1>
-        <p className="text-muted-foreground">Acompanhe as métricas de todas as equipes de vendas</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard Geral</h1>
+          <p className="text-muted-foreground">Acompanhe as métricas de todas as equipes de vendas</p>
+        </div>
+        <PeriodFilter
+          periodStart={periodStart}
+          periodEnd={periodEnd}
+          onPeriodChange={(start, end) => {
+            setPeriodStart(start);
+            setPeriodEnd(end);
+          }}
+        />
       </div>
 
       {/* Main metrics */}

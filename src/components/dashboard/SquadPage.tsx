@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Phone, Target, TrendingUp, DollarSign, Users, Loader2 } from 'lucide-react';
 import { MetricCard } from './MetricCard';
+import { PeriodFilter } from './PeriodFilter';
 import { useSquadMetrics } from '@/hooks/useMetrics';
 
 interface SquadPageProps {
@@ -8,7 +9,9 @@ interface SquadPageProps {
 }
 
 export function SquadPage({ squadSlug }: SquadPageProps) {
-  const { squadMetrics, isLoading, error } = useSquadMetrics();
+  const [periodStart, setPeriodStart] = useState<string | undefined>();
+  const [periodEnd, setPeriodEnd] = useState<string | undefined>();
+  const { squadMetrics, isLoading, error } = useSquadMetrics(periodStart, periodEnd);
 
   const currentSquad = squadMetrics.find(
     (sm) => sm.squad.slug.toLowerCase() === squadSlug.toLowerCase()
@@ -36,7 +39,17 @@ export function SquadPage({ squadSlug }: SquadPageProps) {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-white mb-6">Squad {squad.name}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <h1 className="text-3xl font-bold text-foreground">Squad {squad.name}</h1>
+        <PeriodFilter
+          periodStart={periodStart}
+          periodEnd={periodEnd}
+          onPeriodChange={(start, end) => {
+            setPeriodStart(start);
+            setPeriodEnd(end);
+          }}
+        />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <MetricCard
