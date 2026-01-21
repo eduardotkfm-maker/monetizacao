@@ -299,13 +299,35 @@ Deno.serve(async (req) => {
       const sheetName = sheet.properties.title;
       const sheetNameLower = sheetName.toLowerCase().trim();
       
-      // Skip tabs that are NOT individual closers
+      // First: try direct match with closer name
+      let matchedCloser = closerMap.get(sheetNameLower);
+      
+      // If no direct match, check if it's a "TOTAL SQUAD [NAME]" tab
+      // that corresponds to a single-closer squad (e.g., "TOTAL SQUAD LEANDRO" -> Leandro)
+      if (!matchedCloser && sheetNameLower.includes('total squad')) {
+        for (const [closerNameLower, closer] of closerMap) {
+          if (sheetNameLower.includes(closerNameLower)) {
+            console.log(`Sheet "${sheetName}" is a single-closer squad total, mapping to "${closer.name}"`);
+            matchedCloser = closer;
+            break;
+          }
+        }
+      }
+      
+      // If we found a match, add to valid sheets
+      if (matchedCloser) {
+        console.log(`Sheet "${sheetName}" matched to closer "${matchedCloser.name}"`);
+        validSheets.push({ sheetName, closer: matchedCloser });
+        continue;
+      }
+      
+      // Apply exclusion filters for unmatched sheets
       if (sheetNameLower.includes('total')) {
-        console.log(`Skipping sheet "${sheetName}" - contains "total"`);
+        console.log(`Skipping sheet "${sheetName}" - contains "total" with no closer match`);
         continue;
       }
       if (sheetNameLower.includes('squad')) {
-        console.log(`Skipping sheet "${sheetName}" - contains "squad"`);
+        console.log(`Skipping sheet "${sheetName}" - contains "squad" with no closer match`);
         continue;
       }
       if (sheetNameLower.includes('sdr')) {
@@ -325,15 +347,7 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // Try to match with existing closer (case-insensitive)
-      const matchedCloser = closerMap.get(sheetNameLower);
-      
-      if (matchedCloser) {
-        console.log(`Sheet "${sheetName}" matched to closer "${matchedCloser.name}"`);
-        validSheets.push({ sheetName, closer: matchedCloser });
-      } else {
-        console.log(`Sheet "${sheetName}" has no matching closer in database - skipping`);
-      }
+      console.log(`Sheet "${sheetName}" has no matching closer in database - skipping`);
     }
 
     console.log(`Processing ${validSheets.length} sheets with matching closers`);
