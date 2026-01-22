@@ -269,10 +269,39 @@ Deno.serve(async (req) => {
     // Process data rows (starting from row 4, index 3)
     const rawMetrics: RawMetric[] = [];
     
+    // Usar apenas o primeiro bloco para detectar padrões de linha
+    const firstBlock = funnelBlocks[0];
+    let rowsProcessed = 0;
+    let rowsSkipped = 0;
+    let emptyRows = 0;
+    let totalRows = 0;
+    let headerRowsFound = 0;
+    
+    console.log(`\n=== Starting row processing from row 4 (index 3) to row ${rows.length} ===`);
+    
     for (let rowIndex = 3; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
-      if (!row || row.length === 0) continue;
+      totalRows++;
+      
+      // Log para linhas vazias
+      if (!row || row.length === 0) {
+        emptyRows++;
+        if (emptyRows <= 5) {
+          console.log(`Row ${rowIndex + 1}: EMPTY ROW (count: ${emptyRows})`);
+        }
+        continue;
+      }
+      
+      // Verificar se é uma linha de header repetida (contém "Data" na primeira coluna de data)
+      const firstDataValue = row[firstBlock.dataCol]?.toString().trim().toLowerCase() || '';
+      if (firstDataValue === 'data') {
+        headerRowsFound++;
+        console.log(`Row ${rowIndex + 1}: HEADER ROW FOUND (${headerRowsFound}x) - indicates new vertical block`);
+        continue;
+      }
 
+      let rowHasData = false;
+      
       for (const block of funnelBlocks) {
         const titleCol = block.startCol;
         
@@ -280,7 +309,24 @@ Deno.serve(async (req) => {
         const dateValue = row[block.dataCol]?.toString().trim() || '';
         const parsedDate = parseDate(dateValue);
         
-        if (!parsedDate) continue; // Skip rows without valid date (Total, empty, etc.)
+        // Log detalhado para primeiras linhas de cada padrão
+        if (rowIndex < 10 || (rowIndex >= 10 && rowIndex < 15 && block === firstBlock)) {
+          const skipReason = !parsedDate ? 
+            (dateValue === '' ? 'empty' : dateValue.toLowerCase() === 'total' ? 'total' : `invalid:${dateValue}`) : 
+            'valid';
+          if (block === firstBlock) {
+            console.log(`Row ${rowIndex + 1}, Col ${block.dataCol}: "${dateValue}" -> ${skipReason}`);
+          }
+        }
+        
+        if (!parsedDate) {
+          if (block === firstBlock && dateValue && dateValue.toLowerCase() !== 'total') {
+            rowsSkipped++;
+          }
+          continue;
+        }
+
+        rowHasData = true;
 
         // Offsets relativos ao título do funil:
         // título(0)=Ativados, +1=Agendado, +2=% Agend, +3=Agend dia, +4=Realizado, +5=% Comp, +6=Vendas, +7=% Conv
@@ -298,16 +344,21 @@ Deno.serve(async (req) => {
           // +7 é % Conv (skip)
         };
 
-        // Debug log para as primeiras linhas de CADA bloco
-        if (rowIndex < 6) {
-          console.log(`Row ${rowIndex}, ${block.funnel} (dataCol=${block.dataCol}): Date=${dateValue}(${parsedDate}), Act=${metric.activated}, Sched=${metric.scheduled}, Att=${metric.attended}, Sales=${metric.sales}`);
-        }
-
         rawMetrics.push(metric);
+      }
+      
+      if (rowHasData) {
+        rowsProcessed++;
       }
     }
 
-    console.log(`Extracted ${rawMetrics.length} raw metric entries`);
+    console.log(`\n=== ROW PROCESSING SUMMARY ===`);
+    console.log(`Total rows scanned: ${totalRows}`);
+    console.log(`Empty rows: ${emptyRows}`);
+    console.log(`Header rows (vertical blocks): ${headerRowsFound + 1}`); // +1 for initial header
+    console.log(`Data rows processed: ${rowsProcessed}`);
+    console.log(`Rows skipped (invalid date): ${rowsSkipped}`);
+    console.log(`Raw metrics extracted: ${rawMetrics.length}`);
 
     // Aggregate by SDR
     const aggregatedData = aggregateBySDR(rawMetrics);
