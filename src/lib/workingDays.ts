@@ -19,6 +19,7 @@ const FIXED_HOLIDAYS = [
 const ADDITIONAL_NON_WORKING_DAYS: { year: number; month: number; day: number }[] = [
   { year: 2025, month: 0, day: 2 }, // Emenda Ano Novo 2025
   { year: 2026, month: 0, day: 2 }, // Emenda Ano Novo 2026
+  { year: 2026, month: 0, day: 3 }, // Sábado não trabalhado
 ];
 
 /**
