@@ -1,95 +1,126 @@
 
-# Plano: Corrigir Sincronização que Apaga Dados
+# Plano: Corrigir Mapeamento de Métricas para Alcateia
 
 ## Problema Identificado
 
-O cron job `sync-google-sheets` roda **a cada 1 minuto** e sincroniza **TODOS os closers** usando a configuração global (coluna G). Como as abas do Alcateia e Sharks têm estrutura diferente (coluna G = "SAB" ao invés de "SEMANAL"), ele sobrescreve os dados corretos com zeros.
+A análise dos logs revelou que a estrutura da planilha do **Alcateia** tem um **offset entre blocos diferente** da configuração padrão (13 linhas). 
 
-**Fluxo atual problemático:**
-1. Você sincroniza Alcateia via `sync-squad-sheets` → dados corretos salvos
-2. 1 minuto depois: cron `sync-google-sheets` → lê coluna G (vazia) → sobrescreve com zeros
+### Evidências:
+
+**Logs da coluna H para Gisele:**
+```
+R5:"12"   ← Week 1: Calls (correto)
+R6:"1"    ← Week 1: Sales (correto)
+R7:"8%"   ← Taxa de conversão
+R8:"R$ 14.367,00" ← Revenue (correto)
+...
+R15:"SEMANAL" ← Header do Bloco 2 (linha 15)
+R16:""
+R17:"14"  ← Week 2: Calls
+R18:"4"   ← Week 2: Sales
+R19:"31%" ← Taxa (NÃO é revenue!)
+R20:"57164" ← Esse valor está sendo lido como "sales" na Week 3!
+```
+
+**Problema de cálculo:**
+- `firstBlockStartRow: 5`
+- `blockOffset: 13`
+- Bloco 2 começa em: 5 + 13 = **linha 18** (mas o header está na linha 15!)
+- Bloco 3 começa em: 5 + 26 = **linha 31** (mas os dados da semana 3 estão nas linhas 28-37)
+
+O offset padrão de 13 linhas não corresponde à estrutura real da planilha Alcateia.
+
+## Estrutura Real da Planilha
+
+Analisando a coluna H do Alcateia:
+
+| Linha | Conteúdo | Bloco |
+|-------|----------|-------|
+| R3 | "SEMANAL" | Header |
+| R5-R14 | Dados Semana 1 | Bloco 1 (10 linhas) |
+| R15 | "SEMANAL" | Header Bloco 2 |
+| R17-R26 | Dados Semana 2 | Bloco 2 |
+| R28 | "SEMANAL" | Header Bloco 3 |
+| R30-R39 | Dados Semana 3 | Bloco 3 |
+
+**O offset real é ~13 linhas**, mas os blocos começam nas linhas **5, 17, 30, 43** (não 5, 18, 31, 44).
 
 ## Solução Proposta
 
-Modificar a Edge Function `sync-google-sheets` para **excluir squads que têm configuração própria** na tabela `squad_sheets_config`.
+### Opção 1: Ajustar configuração padrão (Recomendado)
 
-### Lógica:
-
-```text
-sync-google-sheets (cron):
-  1. Buscar lista de squads com configuração própria em squad_sheets_config
-  2. Ao processar closers, PULAR os que pertencem a squads com config própria
-  3. Sincronizar apenas closers de squads SEM config própria (Eagles)
-```
-
-## Alterações Técnicas
-
-### 1. Modificar `sync-google-sheets/index.ts`
-
-Adicionar verificação para pular squads com configuração própria:
+Modificar o `DEFAULT_CONFIG` na Edge Function para refletir a estrutura correta:
 
 ```typescript
-// Buscar squads que têm configuração própria
-const { data: squadConfigs } = await adminClient
-  .from('squad_sheets_config')
-  .select('squad_id');
-
-const squadsWithOwnConfig = new Set(
-  (squadConfigs || []).map(c => c.squad_id)
-);
-
-// No loop de closers, pular os que têm config própria
-for (const { sheetName, closer } of validSheets) {
-  // NOVO: Pular closers de squads com config própria
-  if (squadsWithOwnConfig.has(closer.squad_id)) {
-    console.log(`[sync-google-sheets] Skipping ${closer.name} - squad has own config`);
-    continue;
+const DEFAULT_CONFIG: WeekBlockConfig = {
+  firstBlockStartRow: 5,
+  blockOffset: 12, // Mudou de 13 para 12
+  numberOfBlocks: 4,
+  dateRow: 1,
+  column: 'H',
+  metrics: {
+    calls: 0,    // Linha relativa 1: Calls
+    sales: 1,    // Linha relativa 2: Sales
+    revenue: 3,  // Linha relativa 4: Revenue
+    entries: 4,  // Linha relativa 5: Entries
+    revenueTrend: 5,
+    entriesTrend: 6,
+    cancellations: 7,
+    cancellationValue: 9,
+    cancellationEntries: 10
   }
-  
-  // ... resto do código
-}
+};
 ```
 
-### 2. Atualizar mensagem de log
+### Opção 2: Permitir configuração por squad
 
-Adicionar log indicando quantos closers foram pulados por terem config própria.
+Adicionar UI no `SquadSheetsConfig` para ajustar o `row_mapping` por squad:
+- Eagles: offset 13, column G
+- Alcateia: offset 12, column H
+- Sharks: offset 12, column H (verificar)
 
-## Arquivos a Modificar
+## Análise de Debug Adicional Necessário
+
+Antes de implementar, preciso confirmar a estrutura real dos blocos verificando mais linhas. O problema pode ser:
+
+1. **Offset errado**: 13 vs 12 linhas entre blocos
+2. **Primeira linha errada**: 5 vs 4
+3. **Métricas em posições diferentes**: Sales pode estar em offset 2 ao invés de 1 nos blocos seguintes
+
+## Arquivo a Modificar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/sync-google-sheets/index.ts` | Adicionar lógica para pular squads com config própria |
+| `supabase/functions/sync-squad-sheets/index.ts` | Adicionar debug detalhado para identificar posições corretas |
+| `squad_sheets_config` | Depois, salvar configuração correta para Alcateia |
 
-## Fluxo Após Correção
+## Plano de Implementação
 
-```text
-sync-google-sheets (cron):
-  - Busca squads com config própria: [Alcateia, Sharks]
-  - Processa HANNAH → Eagles não tem config própria → sincroniza ✅
-  - Processa CARLOS → Eagles não tem config própria → sincroniza ✅
-  - Processa DEYVID → Eagles não tem config própria → sincroniza ✅
-  - Processa ISIS → Alcateia TEM config própria → PULA ✅
-  - Processa GISELE → Alcateia TEM config própria → PULA ✅
-  - Processa TAINARA → Alcateia TEM config própria → PULA ✅
-  - Processa LEANDRO → Sharks TEM config própria → PULA ✅
+### Fase 1: Debug Detalhado
+Adicionar log que mostra exatamente quais linhas estão sendo lidas para cada métrica:
 
-sync-squad-sheets?squad=alcateia (manual):
-  - Sincroniza ISIS, GISELE, TAINARA usando coluna H ✅
-  - Dados não são sobrescritos pelo cron ✅
-
-sync-squad-sheets?squad=sharks (manual):
-  - Sincroniza LEANDRO usando coluna H ✅
-  - Dados não são sobrescritos pelo cron ✅
+```typescript
+console.log(`[sync-squad-sheets] ${closer.name} Week ${weekNumber}:`);
+console.log(`  Block starts at row: ${blockStartRow}`);
+console.log(`  Calls (offset ${blockConfig.metrics.calls}): row ${blockStartRow + blockConfig.metrics.calls} = ${getBlockValue(blockConfig.metrics.calls)}`);
+console.log(`  Sales (offset ${blockConfig.metrics.sales}): row ${blockStartRow + blockConfig.metrics.sales} = ${getBlockValue(blockConfig.metrics.sales)}`);
+console.log(`  Revenue (offset ${blockConfig.metrics.revenue}): row ${blockStartRow + blockConfig.metrics.revenue} = ${getBlockValue(blockConfig.metrics.revenue)}`);
 ```
+
+### Fase 2: Corrigir Configuração
+Com base nos logs, ajustar:
+- `blockOffset` para o valor correto
+- `firstBlockStartRow` se necessário
+- Offsets das métricas individuais
+
+### Fase 3: Testar e Validar
+1. Sincronizar Alcateia novamente
+2. Verificar se os dados salvos correspondem à planilha
+3. Confirmar que a taxa de conversão (sales/calls) está correta
 
 ## Resultado Esperado
 
-1. **Eagles**: Continuam sincronizando via cron (coluna G)
-2. **Alcateia/Sharks**: Sincronizam apenas quando você clica em "Sincronizar" na página do squad (coluna H)
-3. **Dados não são mais apagados** pelo cron automático
+Após a correção, os dados do Alcateia devem mostrar:
+- **Isis Week 3**: calls=33, sales=? (valor correto da planilha), revenue=?
+- Taxa de conversão calculada corretamente como `(sales / calls) * 100`
 
-## Próximos Passos Após Implementação
-
-1. Verificar que Alcateia e Sharks têm configuração salva em `squad_sheets_config`
-2. Aguardar 2 minutos para confirmar que o cron não sobrescreve mais os dados
-3. Se desejar sincronização automática para Alcateia/Sharks, podemos criar um cron específico para o `sync-squad-sheets`
