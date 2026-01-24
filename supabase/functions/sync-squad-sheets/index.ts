@@ -59,8 +59,8 @@ const DEFAULT_CONFIG: WeekBlockConfig = {
     revenueTrend: 5,
     entriesTrend: 6,
     cancellations: 7,
-    cancellationValue: 9,
-    cancellationEntries: 10
+    cancellationValue: 8,
+    cancellationEntries: 9
   }
 };
 
