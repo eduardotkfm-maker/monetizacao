@@ -1,177 +1,142 @@
 
+# Plano: Corrigir Mapeamento dos Valores de Cancelamento
 
-# Plano: Descontar Cancelamentos dos Valores de Venda e Entrada
+## Diagnóstico
 
-## Objetivo
+Analisando os logs da sincronização, identificamos o problema no mapeamento dos offsets de cancelamento. A estrutura real da planilha é diferente da configuração atual:
 
-Modificar o cálculo de `revenue` (Faturamento) e `entries` (Valor de Entrada) para subtrair automaticamente os respectivos valores de cancelamento, exibindo assim o **valor líquido** nas métricas do dashboard.
+### Estrutura Real da Planilha (Exemplo Tainara - Semana 1)
+| Row | Offset | Valor na Planilha | Campo Real |
+|-----|--------|-------------------|------------|
+| 5   | 0      | 15                | Calls |
+| 6   | 1      | 1                 | Sales |
+| 7   | 2      | 13,00%            | % Conversão |
+| 8   | 3      | R$ 14.388,00      | Revenue |
+| 9   | 4      | R$ 8.036,00       | Entries |
+| 10  | 5      | (vazio)           | Revenue Trend |
+| 11  | 6      | (vazio)           | Entries Trend |
+| 12  | 7      | R$ 1,00           | Cancellations (count) |
+| 13  | 8      | R$ 12.000,00      | **Valor Venda Cancelado** |
+| 14  | 9      | R$ 3.200,00       | **Valor Entrada Cancelado** |
 
-## Fórmula de Cálculo
-
-```text
-Faturamento Líquido = Faturamento Bruto - Valor Venda Cancelamento
-Entradas Líquido    = Entradas Bruto   - Valor Entrada Cancelamento
-```
-
-**Exemplo:**
-- Faturamento Bruto: R$ 100.000
-- Valor Venda Cancelamento: R$ 8.000
-- **Faturamento Líquido: R$ 92.000** (exibido nos cards)
-
-## Locais de Modificação
-
-A lógica de subtração deve ser aplicada em **todos os pontos de agregação** para garantir consistência em todo o dashboard:
-
-| Local | Função | O que muda |
-|-------|--------|------------|
-| `useMetrics.ts` | `useSquadMetrics` (linha ~192) | Subtrai no cálculo por closer |
-| `useMetrics.ts` | Squad totals (linha ~223) | Subtrai no total do squad |
-| `useMetrics.ts` | `useTotalMetrics` (linha ~263) | Subtrai no total geral |
-| `CloserDetailPage.tsx` | `calculateAggregatedMetrics` (linha ~39) | Subtrai na visão individual |
-
-## Alterações no Código
-
-### 1. `src/hooks/useMetrics.ts` - Cálculo por Closer
-
-```typescript
-// Linha ~192-220 - Dentro de useSquadMetrics
-const closers = Array.from(closerMap.values()).map(({ closer, metrics }) => {
-  const closerTotals = metrics.reduce(
-    (acc, m) => ({
-      calls: acc.calls + m.calls,
-      sales: acc.sales + m.sales,
-      revenue: acc.revenue + Number(m.revenue),
-      entries: acc.entries + Number(m.entries),
-      cancellations: acc.cancellations + (m.cancellations || 0),
-      cancellationValue: acc.cancellationValue + Number(m.cancellation_value || 0),
-      cancellationEntries: acc.cancellationEntries + Number(m.cancellation_entries || 0),
-    }),
-    { ... }
-  );
-  
-  // NOVO: Aplicar desconto de cancelamentos
-  const netRevenue = closerTotals.revenue - closerTotals.cancellationValue;
-  const netEntries = closerTotals.entries - closerTotals.cancellationEntries;
-  
-  const revenueTrend = calculateTrend(netRevenue, referenceDate);
-  const entriesTrend = calculateTrend(netEntries, referenceDate);
-  
-  return {
-    closer,
-    metrics: {
-      ...closerTotals,
-      revenue: netRevenue,       // Valor líquido
-      entries: netEntries,       // Valor líquido
-      revenueTrend,
-      entriesTrend,
-      // ... resto
-    },
-  };
-});
-```
-
-### 2. `src/hooks/useMetrics.ts` - Total do Squad
-
-```typescript
-// Linha ~241-251 - Dentro de useSquadMetrics (squad totals)
-// Os totals já serão automaticamente líquidos pois somam os closers que já têm valores líquidos
-
-// Se necessário, também aplicar no cálculo direto:
-const squadRevenueTrend = calculateTrend(totals.revenue, referenceDate);
-const squadEntriesTrend = calculateTrend(totals.entries, referenceDate);
-```
-
-### 3. `src/hooks/useMetrics.ts` - Total Geral
-
-```typescript
-// Linha ~263-283 - Dentro de useTotalMetrics
-// Os totals já serão líquidos pois vêm dos squads que já têm valores líquidos
-```
-
-### 4. `src/components/dashboard/closer/CloserDetailPage.tsx`
-
-```typescript
-// Função calculateAggregatedMetrics - linhas 39-82
-function calculateAggregatedMetrics(metrics: CloserMetricRecord[]) {
-  // ... somas existentes ...
-
-  const totalRevenue = metrics.reduce((sum, m) => sum + (m.revenue || 0), 0);
-  const totalEntries = metrics.reduce((sum, m) => sum + (m.entries || 0), 0);
-  const totalCancellationValue = metrics.reduce((sum, m) => sum + (m.cancellation_value || 0), 0);
-  const totalCancellationEntries = metrics.reduce((sum, m) => sum + (m.cancellation_entries || 0), 0);
-
-  // NOVO: Calcular valores líquidos
-  const netRevenue = totalRevenue - totalCancellationValue;
-  const netEntries = totalEntries - totalCancellationEntries;
-
-  // Usar valores líquidos para tendência
-  const revenueTrend = metrics.reduce((sum, m) => sum + (m.revenue_trend || 0), 0);
-  const entriesTrend = metrics.reduce((sum, m) => sum + (m.entries_trend || 0), 0);
-
-  return {
-    totalCalls,
-    totalSales,
-    totalRevenue: netRevenue,   // Valor líquido
-    totalEntries: netEntries,   // Valor líquido
-    revenueTrend,
-    entriesTrend,
-    // ... cancelamentos mantidos para exibição separada
-    totalCancellations,
-    totalCancellationValue,
-    totalCancellationEntries,
-    // ...
-  };
+### Configuração Atual (Incorreta)
+```json
+{
+  "cancellations": 7,      // OK
+  "cancellationValue": 9,  // ERRADO - Está lendo Valor Entrada como Valor Venda
+  "cancellationEntries": 10 // ERRADO - Offset inexistente, retorna 0
 }
 ```
 
-## Fluxo de Dados Atualizado
+### Configuração Correta
+```json
+{
+  "cancellations": 7,      // OK - Contagem de cancelamentos
+  "cancellationValue": 8,  // Valor de VENDA cancelado (Row 13)
+  "cancellationEntries": 9 // Valor de ENTRADA cancelado (Row 14)
+}
+```
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    BANCO DE DADOS                           │
-│  revenue: 100000 | cancellation_value: 8000                 │
-│  entries: 50000  | cancellation_entries: 3000               │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    HOOKS DE AGREGAÇÃO                       │
-│  netRevenue = revenue - cancellation_value = 92000          │
-│  netEntries = entries - cancellation_entries = 47000        │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    EXIBIÇÃO NA UI                           │
-│  ┌─────────────────┐  ┌──────────────────────┐              │
-│  │ Faturamento     │  │ Valor Venda Cancel.  │              │
-│  │ R$ 92.000       │  │ R$ 8.000             │              │
-│  │ (valor líquido) │  │ (separado/vermelho)  │              │
-│  └─────────────────┘  └──────────────────────┘              │
-└─────────────────────────────────────────────────────────────┘
+## Solução
+
+Atualizar os DEFAULT_CONFIG em ambas as edge functions para usar os offsets corretos.
+
+## Alterações
+
+### 1. `supabase/functions/sync-google-sheets/index.ts`
+
+Linha ~45-62: Atualizar o DEFAULT_CONFIG:
+
+```typescript
+const DEFAULT_CONFIG: WeekBlockConfig = {
+  firstBlockStartRow: 5,
+  blockOffset: 13,
+  numberOfBlocks: 4,
+  dateRow: 1,
+  column: 'G',
+  metrics: {
+    calls: 0,
+    sales: 1,
+    revenue: 3,
+    entries: 4,
+    revenueTrend: 5,
+    entriesTrend: 6,
+    cancellations: 7,
+    cancellationValue: 8,     // Corrigido: era 9
+    cancellationEntries: 9    // Corrigido: era 10
+  }
+};
+```
+
+### 2. `supabase/functions/sync-squad-sheets/index.ts`
+
+Linha ~48-65: Atualizar o DEFAULT_CONFIG:
+
+```typescript
+const DEFAULT_CONFIG: WeekBlockConfig = {
+  firstBlockStartRow: 5,
+  blockOffset: 12,
+  numberOfBlocks: 4,
+  dateRow: 1,
+  column: 'H',
+  metrics: {
+    calls: 0,
+    sales: 1,
+    revenue: 3,
+    entries: 4,
+    revenueTrend: 5,
+    entriesTrend: 6,
+    cancellations: 7,
+    cancellationValue: 8,     // Corrigido: era 9
+    cancellationEntries: 9    // Corrigido: era 10
+  }
+};
+```
+
+### 3. Atualizar configurações existentes no banco de dados
+
+Após o deploy das edge functions, atualizar as configurações já salvas:
+
+```sql
+-- Atualizar google_sheets_config
+UPDATE google_sheets_config 
+SET row_mapping = jsonb_set(
+  jsonb_set(row_mapping, '{metrics,cancellationValue}', '8'),
+  '{metrics,cancellationEntries}', '9'
+);
+
+-- Atualizar squad_sheets_config
+UPDATE squad_sheets_config 
+SET row_mapping = jsonb_set(
+  jsonb_set(row_mapping, '{metrics,cancellationValue}', '8'),
+  '{metrics,cancellationEntries}', '9'
+);
 ```
 
 ## Arquivos a Modificar
 
-| Arquivo | Linhas | Descrição |
-|---------|--------|-----------|
-| `src/hooks/useMetrics.ts` | ~192-220, ~241-251 | Aplicar subtração no cálculo de closers e squads |
-| `src/components/dashboard/closer/CloserDetailPage.tsx` | ~39-82 | Aplicar subtração na função calculateAggregatedMetrics |
-
-## Impacto Visual
-
-Após a implementação:
-
-1. **Cards de Faturamento** - Mostrarão valor líquido (após descontar cancelamentos)
-2. **Cards de Entradas** - Mostrarão valor líquido (após descontar cancelamentos)
-3. **Cards de Tendência** - Baseados nos valores líquidos
-4. **Cards de Cancelamento** - Continuarão exibindo os valores de cancelamento separadamente (em vermelho)
-5. **Tabela de Dados** - Mantém os valores originais por período para transparência
+| Arquivo | Ação |
+|---------|------|
+| `supabase/functions/sync-google-sheets/index.ts` | Corrigir offsets no DEFAULT_CONFIG |
+| `supabase/functions/sync-squad-sheets/index.ts` | Corrigir offsets no DEFAULT_CONFIG |
 
 ## Resultado Esperado
 
-- Métricas de faturamento e entradas refletirão o **valor real** após cancelamentos
-- Valores de cancelamento permanecem visíveis separadamente para análise
-- Tendências calculadas sobre valores líquidos
-- Consistência em todas as visualizações (Dashboard, Squad, Closer)
+Após as correções e nova sincronização:
+1. **Valor Venda Cancelado** (offset 8): Lerá corretamente `R$ 12.000,00`
+2. **Valor Entrada Cancelado** (offset 9): Lerá corretamente `R$ 3.200,00`
 
+## Validação
+
+Após deploy, sincronizar novamente e verificar:
+```sql
+SELECT c.name, m.cancellation_value, m.cancellation_entries
+FROM metrics m
+JOIN closers c ON c.id = m.closer_id
+WHERE m.period_start >= '2026-01-01'
+ORDER BY c.name, m.period_start;
+```
+
+Os valores devem corresponder à planilha:
+- `cancellation_value` = Valor na coluna "Valor Venda Cancelado"
+- `cancellation_entries` = Valor na coluna "Valor Entrada Cancelado"
