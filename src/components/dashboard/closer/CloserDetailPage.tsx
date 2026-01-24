@@ -55,13 +55,19 @@ function calculateAggregatedMetrics(metrics: CloserMetricRecord[]) {
 
   const totalCalls = metrics.reduce((sum, m) => sum + (m.calls || 0), 0);
   const totalSales = metrics.reduce((sum, m) => sum + (m.sales || 0), 0);
-  const totalRevenue = metrics.reduce((sum, m) => sum + (m.revenue || 0), 0);
-  const totalEntries = metrics.reduce((sum, m) => sum + (m.entries || 0), 0);
-  const revenueTrend = metrics.reduce((sum, m) => sum + (m.revenue_trend || 0), 0);
-  const entriesTrend = metrics.reduce((sum, m) => sum + (m.entries_trend || 0), 0);
+  const grossRevenue = metrics.reduce((sum, m) => sum + (m.revenue || 0), 0);
+  const grossEntries = metrics.reduce((sum, m) => sum + (m.entries || 0), 0);
   const totalCancellations = metrics.reduce((sum, m) => sum + (m.cancellations || 0), 0);
   const totalCancellationValue = metrics.reduce((sum, m) => sum + (m.cancellation_value || 0), 0);
   const totalCancellationEntries = metrics.reduce((sum, m) => sum + (m.cancellation_entries || 0), 0);
+
+  // Valores líquidos (descontando cancelamentos)
+  const totalRevenue = grossRevenue - totalCancellationValue;
+  const totalEntries = grossEntries - totalCancellationEntries;
+
+  // Tendências baseadas nos valores brutos da planilha
+  const revenueTrend = metrics.reduce((sum, m) => sum + (m.revenue_trend || 0), 0);
+  const entriesTrend = metrics.reduce((sum, m) => sum + (m.entries_trend || 0), 0);
 
   const conversionRate = totalCalls > 0 ? (totalSales / totalCalls) * 100 : 0;
   const cancellationRate = totalSales > 0 ? (totalCancellations / totalSales) * 100 : 0;
@@ -69,8 +75,8 @@ function calculateAggregatedMetrics(metrics: CloserMetricRecord[]) {
   return {
     totalCalls,
     totalSales,
-    totalRevenue,
-    totalEntries,
+    totalRevenue,       // Valor líquido
+    totalEntries,       // Valor líquido
     revenueTrend,
     entriesTrend,
     conversionRate,

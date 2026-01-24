@@ -203,15 +203,21 @@ export function useSquadMetrics(periodStart?: string, periodEnd?: string) {
         { calls: 0, sales: 0, revenue: 0, entries: 0, cancellations: 0, cancellationValue: 0, cancellationEntries: 0 }
       );
       
-      // Calcula tendência dinamicamente para cada closer
-      const revenueTrend = calculateTrend(closerTotals.revenue, referenceDate);
-      const entriesTrend = calculateTrend(closerTotals.entries, referenceDate);
+      // Aplicar desconto de cancelamentos - valores líquidos
+      const netRevenue = closerTotals.revenue - closerTotals.cancellationValue;
+      const netEntries = closerTotals.entries - closerTotals.cancellationEntries;
+      
+      // Calcula tendência dinamicamente para cada closer (baseado nos valores líquidos)
+      const revenueTrend = calculateTrend(netRevenue, referenceDate);
+      const entriesTrend = calculateTrend(netEntries, referenceDate);
       const cancellationRate = closerTotals.sales > 0 ? (closerTotals.cancellations / closerTotals.sales) * 100 : 0;
       
       return {
         closer,
         metrics: {
           ...closerTotals,
+          revenue: netRevenue,       // Valor líquido
+          entries: netEntries,       // Valor líquido
           revenueTrend,
           entriesTrend,
           conversion: closerTotals.calls > 0 ? (closerTotals.sales / closerTotals.calls) * 100 : 0,
