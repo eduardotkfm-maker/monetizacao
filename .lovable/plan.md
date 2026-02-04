@@ -1,80 +1,114 @@
 
-# Plano: Corrigir BlockOffset do Eagles
 
-## Problema
+# Plano: Segmentação por Mês e Transição para Dados Manuais
 
-A configuração atual do Eagles usa `blockOffset: 12`, mas a planilha real tem **blockOffset: 13** (cada bloco semanal tem 13 linhas, incluindo 2 linhas de header).
+## Contexto
 
-## Estrutura da Planilha Eagles
+O sistema atual tem dados de **Janeiro de 2025** (mês anterior) importados via Google Sheets. A partir de **Fevereiro de 2025**, os dados serão inseridos **manualmente** em vez de sincronizados com planilhas.
+
+## Objetivo
+
+1. Adicionar um **seletor de mês** global para segmentar os dados
+2. Manter os dados históricos (Janeiro) enquanto permite entrada manual para novos meses
+3. Simplificar a navegação entre meses
+
+## Estrutura Proposta
 
 ```text
-Row 3-4:   Header Semana 1 (SEGUNDA, TERÇA...)
-Row 5:     Calls Realizadas        ← firstBlockStartRow
-Row 6:     Vendas Fechadas
-Row 7:     Taxa de Conversão
-Row 8:     Valor Total (Revenue)
-Row 9:     Valor Entrada
-Row 10:    Tendência Valor Total
-Row 11:    Tendência Valor Entrada
-Row 12:    Número de cancelamento
-Row 13:    % de Cancelamento
-Row 14:    Valor de venda Cancelamento
-Row 15:    Valor total de entrada Can
-─────────────────────────────────────
-Row 16-17: Header Semana 2          ← blockOffset = 13 (18 - 5 = 13)
-Row 18:    Calls Realizadas
-...
-Row 29-30: Header Semana 3
-Row 31:    Calls Realizadas
-...
+┌─────────────────────────────────────────────────────────────┐
+│  Header                                                     │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │  Dashboard Geral     [◀ Jan 2025 ▶] [+ Adicionar]      ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│  Métricas filtradas pelo mês selecionado                    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Correção no Banco de Dados
+## Alterações Planejadas
 
-Atualizar o `row_mapping` do Eagles com blockOffset correto:
+### 1. Novo Componente: MonthSelector
 
-```sql
-UPDATE squad_sheets_config 
-SET row_mapping = '{
-  "column": "G",
-  "firstBlockStartRow": 5,
-  "blockOffset": 13,
-  "numberOfBlocks": 4,
-  "dateRow": 3,
-  "metrics": {
-    "calls": 0,
-    "sales": 1,
-    "revenue": 3,
-    "entries": 4,
-    "revenueTrend": 5,
-    "entriesTrend": 6,
-    "cancellations": 7,
-    "cancellationValue": 9,
-    "cancellationEntries": 10
-  }
-}'::jsonb,
-updated_at = now()
-WHERE squad_id = 'd007406c-5354-4188-b1a7-83818abfa354';
+Criar um componente de seleção de mês com:
+- Setas para navegar entre meses (◀ ▶)
+- Exibição do mês atual em formato "Fevereiro de 2025"
+- Integração com o filtro de período existente
+
+### 2. Atualizar PeriodFilter
+
+Substituir o filtro de período atual por um seletor de mês mais simples:
+- Remover seleção de range customizado
+- Manter atalhos "Este Mês", "Mês Anterior"
+- Calcular automaticamente `period_start` e `period_end` baseado no mês
+
+### 3. Atualizar DashboardOverview e SquadPage
+
+Integrar o novo seletor de mês:
+- Inicializar com o mês atual (Fevereiro 2025)
+- Filtrar métricas pelo mês selecionado
+
+### 4. Formulário de Entrada Manual
+
+O formulário já existe (`SquadMetricsForm`) e suporta:
+- Seleção por Dia, Semana ou Mês
+- Todos os campos de métricas
+
+Adicionar melhorias:
+- Botão "Adicionar Métrica" mais visível no header
+- Validação para não permitir datas no mês anterior (Janeiro)
+
+## Fluxo de Dados
+
+| Mês | Fonte de Dados | Ação |
+|-----|----------------|------|
+| Janeiro 2025 | Google Sheets | Apenas visualização |
+| Fevereiro 2025+ | Manual | Entrada via formulário |
+
+## Arquivos a Modificar
+
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/components/dashboard/MonthSelector.tsx` | **Novo** - Componente de seleção de mês |
+| `src/components/dashboard/PeriodFilter.tsx` | Simplificar para seleção por mês |
+| `src/components/dashboard/DashboardOverview.tsx` | Integrar MonthSelector |
+| `src/components/dashboard/SquadPage.tsx` | Integrar MonthSelector |
+| `src/components/dashboard/closer/CloserDetailPage.tsx` | Integrar MonthSelector |
+
+## Comportamento Esperado
+
+1. Ao abrir o dashboard, exibe o **mês atual** (Fevereiro 2025)
+2. Usuário pode navegar para meses anteriores para ver histórico
+3. Botão "Adicionar Métrica" disponível em todas as páginas
+4. Dados são filtrados automaticamente pelo mês selecionado
+
+---
+
+## Seção Técnica
+
+### Novo Componente MonthSelector
+
+```typescript
+interface MonthSelectorProps {
+  selectedMonth: Date;
+  onMonthChange: (month: Date) => void;
+}
+
+// Calcula automaticamente:
+// period_start = primeiro dia do mês
+// period_end = último dia do mês
 ```
 
-## Após a Correção
+### Lógica de Filtro
 
-1. Executar o UPDATE no banco
-2. Disparar `sync-squad-sheets` para Eagles
-3. Verificar que os dados das 4 semanas foram importados corretamente
+A query de métricas já suporta `periodStart` e `periodEnd`. O MonthSelector irá:
+1. Quando o usuário seleciona um mês, calcular:
+   - `periodStart = startOfMonth(selectedDate)`
+   - `periodEnd = endOfMonth(selectedDate)`
+2. Passar esses valores para os hooks existentes
 
-## Resultado Esperado
+### Inicialização
 
-| Semana | Closer | Calls | Sales | Revenue |
-|--------|--------|-------|-------|---------|
-| Week 1 | Hannah | 12 | 1 | R$ 14.997 |
-| Week 2 | Hannah | 5 | 2 | R$ 14.997 |
-| Week 3 | Hannah | 9 | 1 | (valor da planilha) |
-| Week 4 | Hannah | (valor) | (valor) | (valor) |
+Por padrão, inicializar com:
+- `selectedMonth = new Date()` (data atual = Fevereiro 2025)
+- Ao carregar, já filtra dados de Fevereiro
 
-## Alterações
-
-| Entidade | Campo | Antes | Depois |
-|----------|-------|-------|--------|
-| `squad_sheets_config` (Eagles) | `row_mapping.blockOffset` | 12 | 13 |
-| `squad_sheets_config` (Eagles) | `row_mapping.column` | G | G (mantém) |
