@@ -1,57 +1,82 @@
 
-# Correção: Data Exibida um Dia Antes na Tabela SDR
+# Correção do Deslocamento de Data em Adições Manuais
 
 ## Problema Identificado
 
-O problema NÃO está na gravação dos dados (as datas estão sendo salvas corretamente como `2026-02-05` no banco de dados), mas sim na **exibição** das datas na tabela.
+As datas estão sendo deslocadas para um dia anterior devido ao uso de funções que interpretam strings de data como UTC:
 
-Na linha 115 do `SDRDataTable.tsx`:
+1. **`parseISO()`** - Interpreta "2026-02-05" como `2026-02-05T00:00:00Z` (UTC)
+2. **`new Date(string)`** - Mesmo comportamento de interpretar como UTC
+
+Para usuários no Brasil (UTC-3), isso resulta em:
+- `2026-02-05T00:00:00Z` = `2026-02-04T21:00:00-03:00` (dia anterior)
+
+## Locais Afetados
+
+| Arquivo | Linha | Problema |
+|---------|-------|----------|
+| SquadMetricsForm.tsx | 96-97 | `parseISO()` em `detectPeriodType()` |
+| SquadMetricsForm.tsx | 192 | `parseISO()` no `defaultValues` |
+| SquadMetricsForm.tsx | 211 | `parseISO()` no `useEffect` de reset |
+| SDRWeeklyComparisonChart.tsx | 47 | `parseISO()` no agrupamento semanal |
+| CloserWeeklyComparisonChart.tsx | 47 | `parseISO()` no agrupamento semanal |
+| MetricsTable.tsx | 156-158 | `new Date()` na exibição |
+| MetricsForm.tsx | 67, 70 | `new Date()` no `defaultValues` |
+| PeriodFilter.tsx | 32-33, 89-90 | `new Date()` na exibição |
+| useMetrics.ts | 175, 285 | `new Date()` na referência |
+
+## Solução
+
+Substituir todas as ocorrências de `parseISO()` e `new Date(string)` pela função `parseDateString()` que já existe no projeto e faz o parsing correto no timezone local.
+
 ```typescript
-{format(new Date(metric.date), 'dd/MM/yyyy', { locale: ptBR })}
+// De (incorreto - interpreta como UTC):
+const date = parseISO(metric.period_start);
+const date = new Date(metric.period_start);
+
+// Para (correto - interpreta no timezone local):
+import { parseDateString } from '@/lib/utils';
+const date = parseDateString(metric.period_start);
 ```
-
-Quando `new Date("2026-02-05")` é chamado com uma string ISO sem hora, o JavaScript interpreta como **meia-noite UTC**. Para um usuário no Brasil (UTC-3), isso resulta em:
-- `2026-02-05T00:00:00Z` (UTC) = `2026-02-04T21:00:00-03:00` (Brasil)
-- Ao formatar, aparece **04/02/2026** ao invés de **05/02/2026**
-
-## Solucao
-
-Usar a funcao `parseDateString` que ja existe no projeto para fazer o parsing correto da data no timezone local em todos os componentes que exibem datas.
 
 ## Arquivos a Modificar
 
-1. `src/components/dashboard/sdr/SDRDataTable.tsx` - Exibicao de datas na tabela de metricas SDR
-2. Possivelmente outros componentes que exibem datas de metricas
+1. **`src/components/dashboard/SquadMetricsForm.tsx`**
+   - Linha 5: Remover `parseISO` da importação de date-fns
+   - Linha 17: Adicionar `parseDateString` à importação de utils
+   - Linhas 96-97: Trocar `parseISO` por `parseDateString`
+   - Linha 192: Trocar `parseISO` por `parseDateString`
+   - Linha 211: Trocar `parseISO` por `parseDateString`
 
-## Alteracoes Tecnicas
+2. **`src/components/dashboard/sdr/SDRWeeklyComparisonChart.tsx`**
+   - Linha 13: Remover `parseISO` da importação
+   - Adicionar importação de `parseDateString`
+   - Linha 47: Trocar `parseISO` por `parseDateString`
 
-### SDRDataTable.tsx
+3. **`src/components/dashboard/closer/CloserWeeklyComparisonChart.tsx`**
+   - Linha 13: Remover `parseISO` da importação
+   - Adicionar importação de `parseDateString`
+   - Linha 47: Trocar `parseISO` por `parseDateString`
 
-```diff
-- import { format } from 'date-fns';
-+ import { format } from 'date-fns';
-+ import { parseDateString } from '@/lib/utils';
+4. **`src/components/dashboard/MetricsTable.tsx`**
+   - Adicionar importação de `parseDateString`
+   - Linhas 156-158: Trocar `new Date()` por `parseDateString()`
 
-// Linha 61 - Ordenacao de datas
-- const sortedMetrics = [...metrics].sort(
--   (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-- );
-+ const sortedMetrics = [...metrics].sort(
-+   (a, b) => parseDateString(b.date).getTime() - parseDateString(a.date).getTime()
-+ );
+5. **`src/components/dashboard/MetricsForm.tsx`**
+   - Adicionar importação de `parseDateString`
+   - Linhas 67, 70: Trocar `new Date()` por `parseDateString()`
 
-// Linha 115 - Exibicao da data
-- {format(new Date(metric.date), 'dd/MM/yyyy', { locale: ptBR })}
-+ {format(parseDateString(metric.date), 'dd/MM/yyyy', { locale: ptBR })}
-```
+6. **`src/components/dashboard/PeriodFilter.tsx`**
+   - Adicionar importação de `parseDateString`
+   - Linhas 32-33, 89-90: Trocar `new Date()` por `parseDateString()`
 
-## Verificacao de Outros Componentes
-
-Apos essa correcao, sera necessario verificar se outros componentes tambem usam `new Date(metric.date)` para exibir datas e aplicar a mesma correcao:
-- `CloserDataTable.tsx`
-- Graficos de comparacao semanal
-- Outras tabelas de metricas
+7. **`src/hooks/useMetrics.ts`**
+   - Adicionar importação de `parseDateString`
+   - Linhas 175, 285: Trocar `new Date()` por `parseDateString()`
 
 ## Resultado Esperado
 
-A data exibida na tabela correspondera exatamente a data salva no banco de dados, independente do timezone do usuario.
+Após as correções:
+- As datas selecionadas no formulário serão salvas exatamente como escolhidas
+- As datas exibidas nas tabelas e gráficos corresponderão às datas no banco de dados
+- O comportamento será consistente independente do timezone do usuário
