@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Loader2, Plus, Settings, Database, Users, Link2 } from 'lucide-react';
+import { Trash2, Loader2, Plus, Settings, Database, Users, Link2, Edit2 } from 'lucide-react';
 import { useUsers, useAssignRole, useTogglePermission, useDeleteUser } from '@/hooks/useUserManagement';
 import { useAllEntityLinks, useClosersForLinking, useSDRsForLinking } from '@/hooks/useUserEntityLinks';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,11 +10,13 @@ import { Badge } from '@/components/ui/badge';
 import { MetricsTable } from './MetricsTable';
 import { CreateUserDialog } from './CreateUserDialog';
 import { GoogleSheetsConfig } from './GoogleSheetsConfig';
+import { EditUserLinksDialog } from './EditUserLinksDialog';
 
 const MODULES = ['dashboard', 'eagles', 'alcateia', 'sharks', 'sdrs', 'reports', 'admin'];
 
 export function AdminPanel() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [editLinksUser, setEditLinksUser] = useState<{ id: string; email: string } | null>(null);
   const { user: currentUser } = useAuth();
   const { data: users, isLoading } = useUsers();
   const { data: entityLinks } = useAllEntityLinks();
@@ -132,17 +134,27 @@ export function AdminPanel() {
                             </p>
                           </div>
                           {/* Entity Links */}
-                          {getUserLinks(user.id).length > 0 && (
-                            <div className="flex items-center gap-2 mt-2">
-                              <Link2 className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Vínculos:</span>
-                              {getUserLinks(user.id).map((link, idx) => (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Link2 className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Vínculos:</span>
+                            {getUserLinks(user.id).length > 0 ? (
+                              getUserLinks(user.id).map((link, idx) => (
                                 <Badge key={idx} variant="secondary" className="text-xs">
                                   {link.type}: {link.name}
                                 </Badge>
-                              ))}
-                            </div>
-                          )}
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">Nenhum</span>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-6 w-6 p-0 ml-1"
+                              onClick={() => setEditLinksUser({ id: user.id, email: user.email })}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                         {!isCurrentUser && (
                           <Button
@@ -202,6 +214,15 @@ export function AdminPanel() {
         open={isCreateDialogOpen} 
         onOpenChange={setIsCreateDialogOpen} 
       />
+
+      {editLinksUser && (
+        <EditUserLinksDialog
+          open={!!editLinksUser}
+          onOpenChange={(open) => !open && setEditLinksUser(null)}
+          userId={editLinksUser.id}
+          userEmail={editLinksUser.email}
+        />
+      )}
     </div>
   );
 }
