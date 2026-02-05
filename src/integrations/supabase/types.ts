@@ -464,6 +464,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_linked_to_entity: {
+        Args: { _entity_id: string; _entity_type: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "manager" | "viewer"
