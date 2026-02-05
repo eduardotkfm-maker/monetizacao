@@ -1,92 +1,96 @@
 
-# Plano: Adicionar Seletor de Mês Explícito no Formulário de Métricas
+# Plano: Sincronizar Mês Selecionado com Formulário de Métricas
 
 ## Problema Identificado
 
-O formulário atual requer que o usuário:
-1. Selecione o tipo de período (Dia/Semana/Mês)
-2. Abra o calendário e navegue até o mês desejado
-3. Clique em uma data qualquer daquele mês
+Quando o usuário está visualizando dados de **Janeiro 2026** no dashboard e clica em "Adicionar Métrica", o formulário abre com a data de **Fevereiro 2026** (data atual), obrigando o usuário a navegar manualmente para o mês correto.
 
-Isso é confuso, especialmente quando o usuário quer adicionar métricas de um mês diferente do atual.
-
-## Solução Proposta
-
-Adicionar um **seletor de mês rápido** quando o tipo de período for "Mês", similar ao `MonthSelector` usado no dashboard.
-
-### Novo Comportamento
-
-| Tipo de Período | Seleção |
-|-----------------|---------|
-| **Dia** | Calendário com seleção de dia específico |
-| **Semana** | Calendário com seleção de semana |
-| **Mês** | Seletor de mês com setas (◀ Fevereiro 2026 ▶) |
-
-### Design Visual
+## Fluxo Atual
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  📅 Tipo de Período                                         │
-│  [Dia] [Semana] [Mês ✓]                                     │
-├─────────────────────────────────────────────────────────────┤
-│  📆 Mês                                                     │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  ◀   Fevereiro 2026   ▶                             │   │
-│  └─────────────────────────────────────────────────────┘   │
-│  Período: 01/02/2026 a 28/02/2026                          │
-└─────────────────────────────────────────────────────────────┘
+Dashboard (Janeiro 2026 selecionado)
+        ↓
+  Clica "Adicionar Métrica"
+        ↓
+Formulário abre com Fevereiro 2026 ❌
 ```
 
-### Comportamento
+## Fluxo Desejado
 
-1. Quando o usuário seleciona tipo "Mês":
-   - O calendário é **substituído** pelo seletor de mês
-   - As setas permitem navegar entre meses
-   - O período é calculado automaticamente (primeiro ao último dia)
+```text
+Dashboard (Janeiro 2026 selecionado)
+        ↓
+  Clica "Adicionar Métrica"
+        ↓
+Formulário abre com Janeiro 2026 ✓
+```
 
-2. Quando o usuário seleciona "Dia" ou "Semana":
-   - Mantém o comportamento atual com calendário
+## Solução
+
+Passar o `selectedMonth` do `SquadPage` para o `SquadMetricsDialog` e depois para o `SquadMetricsForm`, para que o formulário inicialize com o mês correto.
 
 ## Arquivos a Modificar
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/components/dashboard/SquadMetricsForm.tsx` | Adicionar lógica condicional para mostrar MonthSelector ou Calendar baseado no period_type |
+| `src/components/dashboard/SquadPage.tsx` | Passar `selectedMonth` para `SquadMetricsDialog` |
+| `src/components/dashboard/SquadMetricsDialog.tsx` | Receber e passar `selectedMonth` para `SquadMetricsForm` |
+| `src/components/dashboard/SquadMetricsForm.tsx` | Usar `selectedMonth` como valor inicial do `selected_date` |
 
 ## Seção Técnica
 
-### Lógica Condicional
+### 1. SquadPage.tsx
 
 ```tsx
-{periodType === 'month' ? (
-  <MonthSelector
-    selectedMonth={field.value}
-    onMonthChange={(date) => field.onChange(date)}
-    className="w-full justify-center"
-  />
-) : (
-  <Popover>
-    {/* Calendário existente */}
-  </Popover>
-)}
+<SquadMetricsDialog
+  open={isMetricsDialogOpen}
+  onOpenChange={setIsMetricsDialogOpen}
+  squadSlug={squadSlug}
+  selectedMonth={selectedMonth}  // ← Adicionar
+/>
 ```
 
-### Importação
+### 2. SquadMetricsDialog.tsx
 
 ```tsx
-import { MonthSelector } from './MonthSelector';
+interface SquadMetricsDialogProps {
+  // ... props existentes
+  selectedMonth?: Date;  // ← Adicionar
+}
+
+// Passar para o form
+<SquadMetricsForm
+  squadId={squad.id}
+  defaultCloserId={defaultCloserId}
+  defaultMetric={metric}
+  selectedMonth={selectedMonth}  // ← Adicionar
+  onSubmit={handleSubmit}
+  isLoading={isPending}
+/>
+```
+
+### 3. SquadMetricsForm.tsx
+
+```tsx
+interface SquadMetricsFormProps {
+  // ... props existentes
+  selectedMonth?: Date;  // ← Adicionar
+}
+
+// Usar no defaultValues
+const form = useForm<SquadMetricsFormValues>({
+  defaultValues: {
+    selected_date: defaultMetric 
+      ? new Date(defaultMetric.period_start) 
+      : selectedMonth || new Date(),  // ← Usar selectedMonth
+    // ...
+  },
+});
 ```
 
 ## Benefícios
 
-1. **Mais intuitivo**: Seleção de mês direta sem navegar no calendário
-2. **Menos cliques**: Um clique nas setas vs. múltiplos cliques no calendário
-3. **Consistência visual**: Usa o mesmo componente do dashboard principal
-4. **Feedback imediato**: Mostra o período calculado em tempo real
-
-## Ordem de Implementação
-
-1. Importar `MonthSelector` no `SquadMetricsForm`
-2. Adicionar renderização condicional baseada em `periodType`
-3. Ajustar estilos para consistência
-4. Testar fluxo completo de adição de métrica mensal
+1. **Consistência de dados**: O formulário reflete o contexto do dashboard
+2. **Menos cliques**: Usuário não precisa navegar para o mês correto
+3. **Menos erros**: Reduz risco de adicionar métrica no mês errado
+4. **Experiência fluida**: O sistema "entende" o contexto do usuário
