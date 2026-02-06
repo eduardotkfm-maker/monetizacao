@@ -1,28 +1,45 @@
 
-# Correção: "Erro ao atualizar métrica" - Funnil NULL na Edição
+# Bloquear edição na visão "Todos os Funis"
 
-## Causa Raiz
+## Objetivo
 
-No arquivo `SDRDetailPage.tsx`, linha 97, ao agregar métricas por data (quando o usuário visualiza "Todos os Funis"), o campo `funnel` é definido como `null`:
+Quando o filtro de funil estiver em "Todos os Funis", os dados exibidos sao agregados (somados) e nao representam um registro individual do banco. Portanto, a edição e exclusão devem ser bloqueadas nessa visão. Somente quando um funil individual for selecionado, os botões de editar/excluir devem aparecer.
 
-```typescript
-m.funnel = null; // Clear funnel since it's aggregated
-```
-
-Quando o usuário clica em "Editar" em uma linha agregada, o `editingMetric` carrega `funnel: null`, que eventualmente pode chegar ao banco como NULL, violando a constraint NOT NULL.
-
-## Correção
+## Alterações
 
 ### Arquivo: `src/components/dashboard/sdr/SDRDetailPage.tsx`
 
-**Linha 97** - Trocar `null` por string vazia:
+Passar `onEditMetric` e `onDeleteMetric` como `undefined` quando nenhum funil individual estiver selecionado e o SDR tiver múltiplos funis:
 
 ```typescript
-// De:
-m.funnel = null; // Clear funnel since it's aggregated
+// Ao renderizar SDRDataTable, condicionar os handlers:
+const isAggregatedView = !selectedFunnel && hasFunnels;
 
-// Para:
-m.funnel = ''; // Clear funnel since it's aggregated
+<SDRDataTable 
+  metrics={displayMetrics || []} 
+  showFunnelColumn={!selectedFunnel && hasFunnels}
+  onEditMetric={isAggregatedView ? undefined : handleEditMetric}
+  onDeleteMetric={isAggregatedView ? undefined : handleDeleteMetric}
+/>
 ```
 
-Isso garante consistência com o tipo `string` (não nullable) e com a constraint NOT NULL do banco de dados. A string vazia já é tratada corretamente em todo o fluxo: o formulário exibe "Nenhum" e o dialog envia `''` ao banco.
+Isso remove automaticamente a coluna de ações (os 3 pontinhos) na tabela quando o usuário está na visão agregada, pois o componente `SDRDataTable` já verifica `hasActions = onEditMetric || onDeleteMetric` para decidir se exibe a coluna.
+
+### Arquivo: `src/components/dashboard/sdr/SDRDetailPage.tsx` (botão Adicionar)
+
+Tambem ocultar o botão "Adicionar" na visão agregada, ja que sem funil selecionado nao faz sentido adicionar manualmente:
+
+```typescript
+{!isAggregatedView && (
+  <Button onClick={() => setShowMetricsDialog(true)} size="sm" className="gap-1.5">
+    <Plus size={16} />
+    <span className="hidden sm:inline">Adicionar</span>
+  </Button>
+)}
+```
+
+## Resultado
+
+- Visão "Todos os Funis": tabela mostra dados somados, sem botões de edição/exclusão/adição
+- Visão com funil individual selecionado: edição, exclusão e adição funcionam normalmente
+- SDRs com apenas 1 funil: comportamento atual mantido (edição sempre disponível)
