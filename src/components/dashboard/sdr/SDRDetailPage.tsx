@@ -33,7 +33,7 @@ interface SDRDetailPageProps {
   sdrId: string;
   selectedMonth: Date;
   onMonthChange: (month: Date) => void;
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 // Calculate aggregated metrics from an array of metrics
@@ -225,14 +225,16 @@ export function SDRDetailPage({
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onBack}
-              className="h-10 w-10"
-            >
-              <ArrowLeft size={20} />
-            </Button>
+            {onBack && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onBack}
+                className="h-10 w-10"
+              >
+                <ArrowLeft size={20} />
+              </Button>
+            )}
 
             <div className="p-3 rounded-2xl bg-primary/10">
               <Icon size={28} className="text-primary" />

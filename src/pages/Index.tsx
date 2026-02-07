@@ -8,11 +8,12 @@ import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
 import { SquadPage } from '@/components/dashboard/SquadPage';
 import { AdminPanel } from '@/components/dashboard/AdminPanel';
 import { SDRDashboard } from '@/components/dashboard/sdr';
+import { UserDashboard } from '@/components/dashboard/UserDashboard';
 import { Loader2 } from 'lucide-react';
 
 const Index = () => {
   const [searchParams] = useSearchParams();
-  const { user, loading } = useAuth();
+  const { user, loading, isUser } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
 
@@ -33,6 +34,11 @@ const Index = () => {
         </div>
       </div>
     );
+  }
+
+  // Role "user" gets a dedicated layout without sidebar
+  if (isUser) {
+    return <UserDashboard />;
   }
 
   const renderContent = () => {
