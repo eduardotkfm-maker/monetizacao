@@ -112,6 +112,7 @@ export function AdminPanel() {
                                   <SelectItem value="admin">Admin</SelectItem>
                                   <SelectItem value="manager">Gerente</SelectItem>
                                   <SelectItem value="viewer">Visualizador</SelectItem>
+                                  <SelectItem value="user">Usuário</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>

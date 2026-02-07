@@ -17,7 +17,7 @@ const MODULES = ['dashboard', 'eagles', 'alcateia', 'sharks', 'sdrs', 'reports',
 const createUserSchema = z.object({
   email: z.string().email('Email inválido'),
   password: z.string().min(6, 'Mínimo 6 caracteres'),
-  role: z.enum(['admin', 'manager', 'viewer']),
+  role: z.enum(['admin', 'manager', 'viewer', 'user']),
   permissions: z.array(z.string()),
   linked_closer_id: z.string().optional(),
   linked_sdr_id: z.string().optional(),
@@ -132,6 +132,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
                       <SelectItem value="admin">Administrador</SelectItem>
                       <SelectItem value="manager">Gerente</SelectItem>
                       <SelectItem value="viewer">Visualizador</SelectItem>
+                      <SelectItem value="user">Usuário</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

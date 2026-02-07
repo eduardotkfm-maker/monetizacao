@@ -16,6 +16,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isManager: boolean;
+  isUser: boolean;
   hasPermission: (module: string) => boolean;
 }
 
@@ -120,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = role === 'admin';
   const isManager = role === 'manager';
+  const isUser = role === 'user';
 
   const hasPermission = (module: string): boolean => {
     if (isAdmin) return true;
@@ -139,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         isAdmin,
         isManager,
+        isUser,
         hasPermission,
       }}
     >
