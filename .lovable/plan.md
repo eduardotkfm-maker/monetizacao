@@ -1,45 +1,58 @@
 
-# Corrigir duplicacao da Clara + Adicionar funil "Mentoria Cleiton" para Carlos
 
-## Problema 1: Dados duplicados da Clara
+# Adicionar "Agendado no Follow Up" nas Metricas SDR
 
-A Clara possui **7 registros com funil vazio** em fevereiro/2026, que sao duplicatas dos dados ja existentes por funil (SS Julia / Mentoria Julia). Quando o dashboard exibe "Todos os Funis", ele soma todos os registros por data, contando esses registros vazios junto com os registros por funil, resultando em valores dobrados.
+## Resumo
 
-Exemplo do dia 2026-02-04:
-- Registro funil vazio: activated=50
-- Registro "SS Julia": activated=50
-- Registro "Mentoria Julia": activated=0
-- Total exibido: 100 (deveria ser 50)
+Adicionar uma nova coluna `scheduled_follow_up` (Agendado no Follow Up) ao sistema de metricas de SDR, permitindo entrada manual e exibicao em todos os dashboards.
 
-### Solucao
+## Alteracoes
 
-Deletar os 7 registros com funil vazio da Clara, pois sao duplicatas dos dados ja inseridos por funil:
+### 1. Banco de Dados
+Adicionar coluna `scheduled_follow_up` (integer, default 0) na tabela `sdr_metrics`.
 
 ```sql
-DELETE FROM public.sdr_metrics 
-WHERE sdr_id = '172ce4ba-5f0c-4aaf-ae9b-d9f5079bb3ed' 
-  AND funnel = '';
+ALTER TABLE public.sdr_metrics 
+ADD COLUMN scheduled_follow_up integer NOT NULL DEFAULT 0;
 ```
 
-Registros a serem removidos (datas: 02/02, 03/02, 04/02, 05/02, 06/02, 09/02, 11/02 de 2026).
+### 2. Hook de Dados (`src/hooks/useSdrMetrics.ts`)
+- Adicionar `scheduled_follow_up` na interface `SDRMetric`
+- Adicionar `totalScheduledFollowUp` na interface `SDRAggregatedMetrics`
+- Incluir no calculo de `calculateAggregatedMetrics`
+- Incluir nas mutations de create/update
 
-## Problema 2: Funil "Mentoria Cleiton" para Carlos
+### 3. Formulario Manual (`src/components/dashboard/sdr/SDRMetricsForm.tsx`)
+- Adicionar campo `scheduled_follow_up` no schema zod
+- Adicionar input no grid de metricas (icone `CalendarCheck` ou similar, cor distinta)
 
-Inserir um registro semente para que o funil apareca no seletor:
+### 4. Tabela de Dados (`src/components/dashboard/sdr/SDRDataTable.tsx`)
+- Adicionar coluna "Agend. Follow Up" entre "Agendados" e "% Agend."
 
-```sql
-INSERT INTO public.sdr_metrics (sdr_id, date, funnel, activated, scheduled, scheduled_rate, scheduled_same_day, attended, attendance_rate, sales, conversion_rate, source)
-VALUES (
-  'a8163c8c-174c-4752-ba46-24b82df7a03f',
-  '2026-02-01',
-  'Mentoria Cleiton',
-  0, 0, 0, 0, 0, 0, 0, 0,
-  'manual'
-);
+### 5. Dashboard Individual (`src/components/dashboard/sdr/SDRDetailPage.tsx`)
+- Adicionar card "Agend. Follow Up" na secao de metricas
+- Incluir na funcao local `calculateAggregatedMetrics` e `aggregateMetricsByDate`
+
+### 6. Dashboard Geral (`src/components/dashboard/sdr/SDRDashboard.tsx`)
+- Adicionar card "Agend. Follow Up" no grid consolidado
+
+### 7. Grafico Semanal (`src/components/dashboard/sdr/SDRWeeklyComparisonChart.tsx`)
+- Considerar adicionar a metrica no grafico (opcional, depende do espaco visual)
+
+## Secao Tecnica
+
+### Fluxo de dados
+```text
+sdr_metrics.scheduled_follow_up (DB)
+  -> useSdrMetrics.ts (interface + aggregation)
+    -> SDRDetailPage (card + table)
+    -> SDRDashboard (card consolidado)
+    -> SDRMetricsForm (input)
 ```
 
-## Resultado esperado
+### Posicionamento no formulario
+O campo sera adicionado na grid 2x3 existente, entre "Agendados" e "Agend. no dia", com icone `CalendarPlus` e cor `text-indigo-500` para diferenciar visualmente.
 
-- Clara: totais de ativacao corretos, sem duplicacao
-- Carlos: funil "Mentoria Cleiton" disponivel no seletor de funis
-- Nenhuma alteracao de codigo necessaria
+### Posicionamento na tabela
+Nova coluna "Agend. FU" sera inserida apos "Agendados" e antes de "% Agend."
+
