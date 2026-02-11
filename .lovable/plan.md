@@ -1,67 +1,45 @@
 
+# Corrigir duplicacao da Clara + Adicionar funil "Mentoria Cleiton" para Carlos
 
-# Permitir Edicao de Todos os Dados do SDR Vinculado
+## Problema 1: Dados duplicados da Clara
 
-## Problema Atual
+A Clara possui **7 registros com funil vazio** em fevereiro/2026, que sao duplicatas dos dados ja existentes por funil (SS Julia / Mentoria Julia). Quando o dashboard exibe "Todos os Funis", ele soma todos os registros por data, contando esses registros vazios junto com os registros por funil, resultando em valores dobrados.
 
-As politicas de seguranca (RLS) atuais exigem que o usuario so pode editar/excluir metricas que **ele mesmo criou** (`created_by = auth.uid()`). Dados importados do Google Sheets tem `created_by = null`, entao o usuario nao consegue edita-los.
+Exemplo do dia 2026-02-04:
+- Registro funil vazio: activated=50
+- Registro "SS Julia": activated=50
+- Registro "Mentoria Julia": activated=0
+- Total exibido: 100 (deveria ser 50)
 
-## Solucao
+### Solucao
 
-Alterar as politicas de UPDATE e DELETE para usuarios com role `user` para que possam gerenciar **qualquer metrica** do SDR vinculado, independente de quem criou.
-
-## Alteracoes no Banco de Dados
-
-Substituir 4 politicas existentes por 2 novas:
-
-```text
-REMOVER:
-- "Users can update sdr_metrics for linked sdrs" (UPDATE com created_by check)
-- "Users can update their own sdr_metrics" (UPDATE com created_by check)
-- "Users can delete sdr_metrics for linked sdrs" (DELETE com created_by check)  
-- "Users can delete their own sdr_metrics" (DELETE com created_by check)
-
-CRIAR:
-- "Users can update sdr_metrics for linked sdrs" (UPDATE apenas com is_linked_to_entity)
-- "Users can delete sdr_metrics for linked sdrs" (DELETE apenas com is_linked_to_entity)
-```
-
-### SQL da Migracao
+Deletar os 7 registros com funil vazio da Clara, pois sao duplicatas dos dados ja inseridos por funil:
 
 ```sql
--- Remove politicas antigas de UPDATE
-DROP POLICY IF EXISTS "Users can update sdr_metrics for linked sdrs" ON public.sdr_metrics;
-DROP POLICY IF EXISTS "Users can update their own sdr_metrics" ON public.sdr_metrics;
-
--- Remove politicas antigas de DELETE
-DROP POLICY IF EXISTS "Users can delete sdr_metrics for linked sdrs" ON public.sdr_metrics;
-DROP POLICY IF EXISTS "Users can delete their own sdr_metrics" ON public.sdr_metrics;
-
--- Nova politica de UPDATE: usuario pode editar qualquer metrica do SDR vinculado
-CREATE POLICY "Users can update sdr_metrics for linked sdrs"
-  ON public.sdr_metrics FOR UPDATE
-  USING (
-    has_role(auth.uid(), 'user'::app_role)
-    AND is_linked_to_entity(auth.uid(), 'sdr'::text, sdr_id)
-  )
-  WITH CHECK (
-    has_role(auth.uid(), 'user'::app_role)
-    AND is_linked_to_entity(auth.uid(), 'sdr'::text, sdr_id)
-  );
-
--- Nova politica de DELETE: usuario pode excluir qualquer metrica do SDR vinculado
-CREATE POLICY "Users can delete sdr_metrics for linked sdrs"
-  ON public.sdr_metrics FOR DELETE
-  USING (
-    has_role(auth.uid(), 'user'::app_role)
-    AND is_linked_to_entity(auth.uid(), 'sdr'::text, sdr_id)
-  );
+DELETE FROM public.sdr_metrics 
+WHERE sdr_id = '172ce4ba-5f0c-4aaf-ae9b-d9f5079bb3ed' 
+  AND funnel = '';
 ```
 
-## Resultado
+Registros a serem removidos (datas: 02/02, 03/02, 04/02, 05/02, 06/02, 09/02, 11/02 de 2026).
 
-- Usuarios com role `user` poderao editar e excluir **todas** as metricas do SDR vinculado (manuais e importadas)
-- Admins e managers mantem acesso total
-- A politica de INSERT continua exigindo `created_by = auth.uid()` para rastreabilidade
-- Nenhuma alteracao no frontend e necessaria
+## Problema 2: Funil "Mentoria Cleiton" para Carlos
 
+Inserir um registro semente para que o funil apareca no seletor:
+
+```sql
+INSERT INTO public.sdr_metrics (sdr_id, date, funnel, activated, scheduled, scheduled_rate, scheduled_same_day, attended, attendance_rate, sales, conversion_rate, source)
+VALUES (
+  'a8163c8c-174c-4752-ba46-24b82df7a03f',
+  '2026-02-01',
+  'Mentoria Cleiton',
+  0, 0, 0, 0, 0, 0, 0, 0,
+  'manual'
+);
+```
+
+## Resultado esperado
+
+- Clara: totais de ativacao corretos, sem duplicacao
+- Carlos: funil "Mentoria Cleiton" disponivel no seletor de funis
+- Nenhuma alteracao de codigo necessaria
