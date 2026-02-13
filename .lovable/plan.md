@@ -1,48 +1,51 @@
 
-# Reestruturacao de Squads e Closers
+# Configurar Usuarios Closer como Role "User" com Vinculos
 
 ## Resumo
-Remover os closers Isis e Carlos do sistema, migrar Gisele e Tainara do squad Alcateia para o Eagles, e eliminar o squad Alcateia. O sistema passara a ter apenas 2 squads: **Eagles** (Deyvid, Hannah, Gisele, Tainara) e **Sharks** (Leandro).
+Configurar 3 contas de usuario com role "user" e vincula-las aos respectivos closers para acesso autonomo aos dados.
 
-## Dados Afetados
+## Estado Atual
 
-| Closer | Acao | Metricas historicas |
-|--------|------|---------------------|
-| Isis | Remover | 12 registros (serao deletados) |
-| Carlos | Remover | 8 registros (serao deletados) |
-| Gisele | Mover para Eagles | 16 registros (mantidos) |
-| Tainara | Mover para Eagles | 15 registros (mantidos) |
+| Email | Role Atual | Vinculo Atual |
+|-------|-----------|---------------|
+| closer1.juliaottoni@mv4digital.com.br | viewer | Nenhum |
+| closer2.juliaottoni@mv4digital.com.br | user | Nenhum |
+| closer3.juliaottoni@mv4digital.com.br | user | Nenhum |
 
-**Squad Alcateia**: sera removido junto com sua config de planilha e permissoes associadas.
+## Alteracoes Necessarias
 
-## Etapas
+### 1. Atualizar role do closer1 para "user"
+O closer1 esta como "viewer" e precisa ser alterado para "user".
 
-### 1. Migration SQL (banco de dados)
-- Mover Gisele e Tainara para o squad Eagles (`squad_id` atualizado)
-- Deletar metricas de Isis e Carlos
-- Deletar goals de Isis e Carlos (se existirem)
-- Deletar user_entity_links de Isis e Carlos (se existirem)
-- Deletar closers Isis e Carlos
-- Deletar `squad_sheets_config` do Alcateia
-- Deletar `module_permissions` com module = 'alcateia'
-- Deletar squad Alcateia
+### 2. Criar vinculos na tabela `user_entity_links`
 
-### 2. Codigo - Remover referencias ao Alcateia
-Arquivos que precisam de alteracao:
+| Email | Closer Vinculado | Closer ID |
+|-------|-----------------|-----------|
+| closer1.juliaottoni@mv4digital.com.br | Tainara | e87f0aef-ebfb-4f3a-9903-50ed81f40065 |
+| closer2.juliaottoni@mv4digital.com.br | Gisele | c6d6a78f-4b19-4860-ae98-f1d9ea2cb9e4 |
+| closer3.juliaottoni@mv4digital.com.br | Hannah | cab5f412-23bc-4239-bc2c-b82fb473a093 |
 
-- **`src/components/dashboard/Sidebar.tsx`**: Remover item "Squad Alcateia" do menu, remover 'alcateia' do tipo `ModuleId`
-- **`src/components/dashboard/AdminPanel.tsx`**: Remover 'alcateia' do array `MODULES`
-- **`src/components/dashboard/BottomNavigation.tsx`**: Remover 'alcateia' da verificacao `isSquadActive`
-- **`src/pages/Index.tsx`**: Remover case 'alcateia' do switch e da lista de modulos validos
-- **`src/hooks/useMetrics.ts`**: Remover logica `isAlcateia` (todos os squads passam a usar calculo de vendas liquidas)
-- **`src/components/dashboard/closer/CloserDetailPage.tsx`**: Remover logica `isAlcateia` (usar vendas liquidas para todos)
-- **`src/components/dashboard/SquadSection.tsx`**: Remover case 'alcateia' do switch de estilos
-- **`src/components/dashboard/CombinedMetricCard.tsx`**: Remover variant 'alcateia'
-- **`src/components/dashboard/MetricCard.tsx`**: Remover variant 'alcateia'
-- **`src/components/dashboard/GoalsConfig.tsx`**: Verificar e remover filtros do Alcateia
+### 3. Atualizar permissoes de modulo
+Remover permissoes de modulo desnecessarias do closer1 (dashboard, eagles) pois usuarios com role "user" acessam o UserDashboard diretamente.
 
-### 3. Impacto no calculo de vendas liquidas
-Com o fim do Alcateia, a excecao "Alcateia exibe bruto" deixa de existir. **Todos os squads passarao a usar Net Sales** (Vendas Brutas - Cancelamentos), simplificando a logica.
+## Detalhes Tecnicos
 
-### 4. CSS/Tailwind (opcional - limpeza)
-As variaveis CSS `--alcateia` e `--alcateia-light` e a config Tailwind podem ser removidas, mas nao causam erro se mantidas.
+SQL a ser executado:
+
+```sql
+-- 1. Atualizar role do closer1 para 'user'
+UPDATE user_roles SET role = 'user' 
+WHERE user_id = 'ec25c5c8-8c92-4cd8-8837-10f687898241';
+
+-- 2. Limpar permissoes de modulo do closer1 (users acessam UserDashboard)
+DELETE FROM module_permissions 
+WHERE user_id = 'ec25c5c8-8c92-4cd8-8837-10f687898241';
+
+-- 3. Criar vinculos user <-> closer
+INSERT INTO user_entity_links (user_id, entity_type, entity_id) VALUES
+('ec25c5c8-8c92-4cd8-8837-10f687898241', 'closer', 'e87f0aef-ebfb-4f3a-9903-50ed81f40065'),
+('f0b684e9-89b7-4590-bc59-84bb1e3b8991', 'closer', 'c6d6a78f-4b19-4860-ae98-f1d9ea2cb9e4'),
+('e3dc1360-aae3-45b7-934a-7c2efbdb70f5', 'closer', 'cab5f412-23bc-4239-bc2c-b82fb473a093');
+```
+
+Nenhuma alteracao de codigo e necessaria -- a infraestrutura de UserDashboard e RLS ja suporta usuarios com role "user" vinculados a closers.
