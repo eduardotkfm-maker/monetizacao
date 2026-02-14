@@ -1,27 +1,52 @@
 
 
-# Adicionar Confirmacao de Exclusao em Reunioes
+# Persistir Rascunhos de Texto em Reunioes
 
 ## Problema
-Notas e itens de acao podem ser deletados com um unico clique, sem confirmacao. Isso causou perda de dados irrecuperavel.
+Ao digitar uma nota ou descricao de acao e sair da aba (ou navegar para outra secao), o texto digitado e perdido antes de ser salvo.
 
 ## Solucao
-Adicionar dialogo de confirmacao (AlertDialog) antes de excluir:
-- Notas de reuniao
-- Itens de acao (plano de acao)
-- Reunioes inteiras
+Usar `localStorage` para salvar automaticamente o rascunho enquanto o usuario digita. O texto sera restaurado ao voltar para a aba/reuniao e limpo apos o envio com sucesso.
 
-## Alteracoes
+## Arquivos Alterados
 
 ### 1. `src/components/dashboard/meetings/MeetingNotes.tsx`
-- Adicionar AlertDialog ao botao de deletar nota
-- Exibir mensagem "Tem certeza que deseja excluir esta nota? Esta acao nao pode ser desfeita."
+- Salvar o conteudo do textarea no `localStorage` com chave unica por reuniao (`draft-note-{meetingId}`)
+- Ao montar o componente, carregar o rascunho do `localStorage`
+- Ao enviar a nota com sucesso, limpar o rascunho do `localStorage`
 
 ### 2. `src/components/dashboard/meetings/ActionItems.tsx`
-- Adicionar AlertDialog ao botao de deletar item de acao
-- Exibir mensagem "Tem certeza que deseja excluir esta acao? Esta acao nao pode ser desfeita."
+- Salvar o titulo da acao no `localStorage` com chave `draft-action-{meetingId}`
+- Ao montar/abrir o formulario, carregar o rascunho
+- Ao adicionar a acao com sucesso, limpar o rascunho
 
-### 3. `src/components/dashboard/meetings/MeetingsPage.tsx`
-- Verificar se a exclusao de reuniao ja possui confirmacao; caso nao, adicionar AlertDialog tambem.
+## Detalhes Tecnicos
 
-Nenhuma alteracao de banco de dados e necessaria.
+Exemplo da logica para MeetingNotes:
+
+```typescript
+const STORAGE_KEY = `draft-note-${meetingId}`;
+
+// Inicializar com rascunho salvo
+const [content, setContent] = useState(() => {
+  return localStorage.getItem(STORAGE_KEY) || '';
+});
+
+// Salvar no localStorage a cada alteracao
+useEffect(() => {
+  if (content) {
+    localStorage.setItem(STORAGE_KEY, content);
+  } else {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+}, [content, STORAGE_KEY]);
+
+// Ao enviar com sucesso, limpar
+setContent('');
+localStorage.removeItem(STORAGE_KEY);
+```
+
+A mesma abordagem sera aplicada ao campo de titulo em ActionItems.
+
+Nenhuma alteracao de banco de dados necessaria.
+
