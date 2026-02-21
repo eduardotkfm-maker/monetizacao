@@ -138,11 +138,13 @@ export function SDRDetailPage({
   
   const { data: sdrs } = useSDRs();
   const { data: funnels, isLoading: isLoadingFunnels } = useSDRFunnels(sdrId);
+  const hasFunnels = funnels && funnels.length >= 1;
   const { data: rawMetrics, isLoading: isLoadingMetrics } = useSDRMetrics(
     sdrId,
     periodStart,
     periodEnd,
-    undefined
+    undefined,
+    hasFunnels || false
   );
   const { data: goals } = useGoals('sdr', sdrId, monthStr);
 
@@ -159,7 +161,7 @@ export function SDRDetailPage({
     
     // If no funnel selected and SDR has multiple funnels, aggregate by date
     // Exclude empty-funnel records (created by a previous bug) to avoid inflating totals
-    if (funnels && funnels.length > 1) {
+    if (hasFunnels) {
       const metricsWithFunnel = rawMetrics.filter(m => m.funnel !== '');
       return aggregateMetricsByDate(metricsWithFunnel);
     }
@@ -186,7 +188,6 @@ export function SDRDetailPage({
   const aggregatedMetrics = weekFilteredMetrics.length > 0 ? calculateAggregatedMetrics(weekFilteredMetrics) : null;
 
   const Icon = sdr?.type === 'social_selling' ? Users : Phone;
-  const hasFunnels = funnels && funnels.length > 1;
   const isAggregatedView = !selectedFunnel && hasFunnels;
 
   // Reset week when month changes
