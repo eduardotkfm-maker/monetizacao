@@ -71,10 +71,11 @@ export function useSDRMetrics(
   sdrId?: string,
   periodStart?: string,
   periodEnd?: string,
-  funnel?: string | null
+  funnel?: string | null,
+  excludeEmptyFunnel?: boolean
 ) {
   return useQuery({
-    queryKey: ['sdr-metrics', sdrId, periodStart, periodEnd, funnel],
+    queryKey: ['sdr-metrics', sdrId, periodStart, periodEnd, funnel, excludeEmptyFunnel],
     queryFn: async () => {
       if (!sdrId) return [];
 
@@ -93,6 +94,10 @@ export function useSDRMetrics(
       // Filter by specific funnel if provided
       if (funnel) {
         query = query.eq('funnel', funnel);
+      }
+      // Exclude empty funnel records (legacy bug data)
+      if (excludeEmptyFunnel && !funnel) {
+        query = query.neq('funnel', '');
       }
 
       const { data, error } = await query;
