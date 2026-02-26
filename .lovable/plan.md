@@ -1,38 +1,29 @@
 
 
-# Integrar dados de SDR/Social Selling nos Relatórios por Funil
+# Reestruturar "Desempenho por Funil" com dados abertos e filtro
 
-## Problema
-Os RPCs `get_all_funnels_summary` e `get_funnel_report` só consultam a tabela `funnel_daily_data` (preenchida por Closers). Os SDRs e Social Selling preenchem dados na tabela `sdr_metrics` com campo `funnel` (texto) que mapeia para os nomes dos funis na tabela `funnels`. Esses dados não aparecem nos relatórios.
+## Situação atual
+A seção "Desempenho por Funil" mostra cards resumidos para cada funil. Ao clicar num card, o usuário é levado a uma visão detalhada com gráfico. O filtro de funil no header já existe mas controla a visão detalhada separadamente.
 
-Dados existentes em `sdr_metrics` para fevereiro/2026: 891 ativados (Social Selling Cleiton), 407 ativados (Teste), 300 ativados (50 Scripts), etc. Nada disso aparece na página de Relatórios.
+## Mudança proposta
 
-## Mapeamento de campos
+Remover os cards de resumo por funil e substituir por uma **tabela aberta** com todos os dados de todos os funis visíveis de uma vez. O filtro de funil no header (Select dropdown) passa a controlar quais linhas aparecem na tabela — "Todos os Funis" mostra todas as linhas, selecionar um funil específico filtra apenas aquele.
 
-| sdr_metrics | Relatório |
-|---|---|
-| activated | leads (ativados = leads gerados pelo SDR) |
-| scheduled | calls_scheduled (agendamentos) |
-| attended | calls_done (realizadas) |
-| sales | sales |
+### Alterações em `ReportsPage.tsx`
+1. Remover a seção "All funnels summary cards" que renderiza `FunnelSummaryCard` em grid
+2. Remover o `ArrowLeft` e a lógica de `selectedFunnelId` para navegação de detalhe
+3. Substituir por uma **tabela de dados** mostrando todos os funis com colunas: Funil, Categoria, Leads, Qualificados, Agendadas, Realizadas, Vendas, Faturamento, Conversão
+4. O filtro Select no header filtra as linhas da tabela (client-side, filtrando `summaries`)
+5. Manter o `FunnelChart` — quando um funil é selecionado no dropdown, mostrar o gráfico dele acima da tabela
+6. Os cards de totais no topo se adaptam: quando um funil é selecionado, mostram os totais daquele funil; quando "Todos", mostram o agregado
 
-Os SDRs não preenchem `qualified_count` nem `sales_value`, então esses campos virão apenas de `funnel_daily_data`.
+### Dados computados
+- `displayedSummaries`: `selectedFunnelId ? summaries.filter(f => f.funnel_id === selectedFunnelId) : summaries`
+- `totals`: recalcular com base em `displayedSummaries` em vez de `summaries`
 
-## Solução
-
-### 1. Atualizar RPC `get_all_funnels_summary`
-- Fazer JOIN com `sdr_metrics` via `funnels.name = sdr_metrics.funnel`
-- Somar `activated` ao `total_leads`, `scheduled` ao `total_calls_scheduled`, `attended` ao `total_calls_done`, `sales` ao `total_sales`
-- Manter `qualified_count` e `sales_value` apenas de `funnel_daily_data`
-- Recalcular taxas de conversão com os totais combinados
-
-### 2. Atualizar RPC `get_funnel_report`
-- Mesma lógica: combinar dados de `funnel_daily_data` + `sdr_metrics` para o funil específico
-- Recalcular todas as taxas de conversão entre estágios
+### Nova tabela inline
+Usar os componentes `Table` existentes (`@/components/ui/table`) para renderizar a tabela com scroll horizontal em mobile.
 
 ### Arquivos alterados
-- Migration SQL: atualizar as duas funções RPC
-
-### Nota técnica
-O JOIN entre `sdr_metrics.funnel` (texto) e `funnels.name` (texto) já funciona para os dados existentes. Não é necessário alterar código frontend — os RPCs já alimentam os componentes da página de Relatórios.
+- `src/components/dashboard/reports/ReportsPage.tsx` — reestruturar layout
 
