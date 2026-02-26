@@ -1,51 +1,56 @@
 
 
-# Plano de Implementação — PRD Closer Intensivo v3.0
+# Ajuste dos Funis no Módulo de Relatórios
 
-O PRD abrange 4 frentes selecionadas. Dado o tamanho, a implementação será faseada seguindo as dependências do cronograma do PRD.
+## Situação Atual vs. Desejada
 
----
+| Atual | Ação | Novo Nome |
+|-------|------|-----------|
+| Implementação | Merge → Implementação Julia | sdr_metrics: renomear |
+| Implementação Carlos | Merge → Implementação Julia | sdr_metrics: renomear, desativar funil |
+| Implementação Dienifer | Merge → Implementação Julia | sdr_metrics: renomear, desativar funil |
+| Implementaçao Julia (typo) | Corrigir nome | Implementação Julia |
+| SS Cleiton | Renomear | Social Selling Cleiton |
+| SS Julia | Renomear | Social Selling Julia |
+| Orgânico Cleiton | Renomear | Aplicação Orgânico Cleiton |
+| MPM | Desativar | — |
+| Reels magnético | Desativar | — |
+| Teste | Manter | — |
+| 50 Scripts | Manter | — |
+| Mentoria Julia | Manter | — |
+| Mentoria Cleiton | Manter | — |
 
-## Fase 1: Schema SQL + Ajustes de Dados (P0) ✅ CONCLUÍDO
+**Novos funis a criar:**
+- Indicação Cleiton
+- Indicação Julia
+- Indicação Interna
+- Aplicação Orgânico Julia
 
-### 1.1 ✅ Criar tabela `funnels` (sistema centralizado de funis)
-### 1.2 ✅ Criar tabela `user_funnels` (atribuição funil↔usuário)
-### 1.3 ✅ Criar tabela `funnel_daily_data` (dados do closer por funil)
-### 1.4 ✅ RLS policies
-### 1.5 ✅ Índices
-### 1.6 ✅ Migrar dados existentes de `sdr_funnels`
+## Operações
 
-### 1.7 Operações de dados (pendente - requer confirmação do usuário)
-- Remover SDR Dienifer do sistema (ou marcar como inativa)
-- Atribuir funil "Social Selling" para Nathi via `user_funnels`
+### 1. Renomear funis na tabela `funnels`
+- "Implementaçao Julia" → "Implementação Julia"
+- "SS Cleiton" → "Social Selling Cleiton"
+- "SS Julia" → "Social Selling Julia"
+- "Orgânico Cleiton" → "Aplicação Orgânico Cleiton"
 
----
+### 2. Merge dos funis de implementação
+- Atualizar `sdr_metrics.funnel` de "Implementação", "Implementação Carlos", "Implementação Dienifer" → "Implementação Julia"
+- Atualizar `sdr_metrics.funnel` de "SS Cleiton" → "Social Selling Cleiton", "SS Julia" → "Social Selling Julia", "Orgânico Cleiton" → "Aplicação Orgânico Cleiton"
+- Mover `user_funnels` e `sdr_funnels` dos funis mergeados para "Implementação Julia"
+- Desativar funis: "Implementação", "Implementação Carlos", "Implementação Dienifer"
 
-## Fase 2: Exclusão de Usuários (P1) ✅ CONCLUÍDO
+### 3. Desativar funis removidos
+- MPM (`is_active = false`)
+- Reels magnético (`is_active = false`)
 
-### 2.1 ✅ Edge Function `admin-delete-user` (exclusão cascata + Auth)
-### 2.2 ✅ Frontend: `DeleteUserDialog` com confirmação dupla
-### 2.3 ✅ Atualizar `AdminPanel.tsx`
+### 4. Criar novos funis
+- Indicação Cleiton, Indicação Julia, Indicação Interna, Aplicação Orgânico Julia
 
----
+### 5. Atualizar a `ReportsPage`
+- Nenhuma alteração de código necessária — a página já lista todos os funis ativos via RPC `get_all_funnels_summary`
 
-## Fase 3: Correção do Cálculo de Tendência (P1) ✅ CONCLUÍDO
+### Impacto nos dados
+- 73 registros em `sdr_metrics` serão renomeados (10 "Implementação" + 31 "Implementação Carlos" + 32 "Implementação Dienifer")
+- Dados históricos preservados, apenas o campo `funnel` será atualizado
 
-### 3.1 ✅ `calculateTrend` mantido compatível, adicionado `calculateTrendDetailed`
-### 3.2 ✅ `MetricCard` agora suporta prop `trendWarning` para mensagens de dados insuficientes
-
----
-
-## Fase 4: Módulo de Relatórios Backend (P1) ✅ CONCLUÍDO
-
-### 4.1 ✅ RPCs `get_funnel_report` e `get_all_funnels_summary` criadas
-### 4.2 ✅ Frontend: Página de Relatórios com FunnelChart, FunnelSummaryCard, filtros
-### 4.3 ✅ Hook `useFunnels.ts` com todas as queries e mutations
-
----
-
-## Fase 5: Cadastro Closer por Funil + Filtro (P1-P2) ✅ CONCLUÍDO
-
-### 5.1 ✅ Formulário `CloserFunnelForm` com entrada batch por funil
-### 5.2 ✅ Filtro por funil no dashboard do Closer (dropdown Select)
-### 5.3 ✅ Hooks: `useUserFunnels`, `useCloserFunnelData`, `useCreateFunnelDailyData`
