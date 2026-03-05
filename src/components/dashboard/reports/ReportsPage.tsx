@@ -213,6 +213,14 @@ export function ReportsPage() {
           <ProductSalesTable data={personProductData || []} isLoading={isLoadingPersonProduct} />
         </TabsContent>
       </Tabs>
+
+      {canManage && (
+        <SDRMetricsDialog
+          open={sdrDialogOpen}
+          onOpenChange={setSdrDialogOpen}
+          sdrType={sdrDialogType}
+        />
+      )}
     </div>
   );
 }
