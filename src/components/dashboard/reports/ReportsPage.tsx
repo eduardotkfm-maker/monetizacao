@@ -90,6 +90,24 @@ export function ReportsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {canManage && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="gap-1.5">
+                  <Plus size={16} />
+                  Adicionar Métrica
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => { setSdrDialogType('sdr'); setSdrDialogOpen(true); }}>
+                  Métrica SDR
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setSdrDialogType('social_selling'); setSdrDialogOpen(true); }}>
+                  Métrica Social Selling
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <PeriodFilter
             periodStart={customPeriodStart}
             periodEnd={customPeriodEnd}
