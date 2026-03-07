@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { FileText, TrendingUp, Users, Phone, DollarSign, Target, Filter, Plus } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,11 @@ import { useAllFunnelsSummary, useFunnelReport, useSalesByPersonAndProduct, type
 import { MetricCardSkeletonGrid } from '@/components/dashboard/skeletons';
 import { FunnelChart } from './FunnelChart';
 import { ProductSalesTable } from './ProductSalesTable';
+import { EditableCell } from './EditableCell';
 import { SDRMetricsDialog } from '@/components/dashboard/sdr/SDRMetricsDialog';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
@@ -191,16 +195,7 @@ export function ReportsPage() {
                   </TableHeader>
                   <TableBody>
                     {displayedSummaries.map((f) => (
-                      <TableRow key={f.funnel_id}>
-                        <TableCell className="font-medium">{f.funnel_name}</TableCell>
-                        <TableCell className="text-right">{Number(f.total_leads)}</TableCell>
-                        <TableCell className="text-right">{Number(f.total_qualified)}</TableCell>
-                        <TableCell className="text-right">{Number(f.total_calls_scheduled)}</TableCell>
-                        <TableCell className="text-right">{Number(f.total_calls_done)}</TableCell>
-                        <TableCell className="text-right">{Number(f.total_sales)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(Number(f.total_revenue))}</TableCell>
-                        <TableCell className="text-right font-semibold">{Number(f.conversion_rate).toFixed(1)}%</TableCell>
-                      </TableRow>
+                      <FunnelRow key={f.funnel_id} funnel={f} canEdit={canManage} periodStart={periodStart} periodEnd={periodEnd} formatCurrency={formatCurrency} />
                     ))}
                   </TableBody>
                 </Table>
@@ -236,5 +231,87 @@ function SummaryCard({ icon: Icon, title, value }: { icon: React.ElementType; ti
         <p className="text-xl font-bold text-foreground">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function FunnelRow({ funnel: f, canEdit, periodStart, periodEnd, formatCurrency }: {
+  funnel: FunnelSummary;
+  canEdit: boolean;
+  periodStart: string;
+  periodEnd: string;
+  formatCurrency: (v: number) => string;
+}) {
+  const queryClient = useQueryClient();
+
+  const handleSave = async (field: 'leads' | 'qualified' | 'scheduled' | 'done' | 'sales' | 'revenue', newValue: number) => {
+    const currentValues: Record<string, number> = {
+      leads: Number(f.total_leads),
+      qualified: Number(f.total_qualified),
+      scheduled: Number(f.total_calls_scheduled),
+      done: Number(f.total_calls_done),
+      sales: Number(f.total_sales),
+      revenue: Number(f.total_revenue),
+    };
+    const delta = newValue - currentValues[field];
+    if (delta === 0) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
+      // Map field to funnel_daily_data columns
+      const fieldMap: Record<string, string> = {
+        leads: 'leads_count',
+        qualified: 'qualified_count',
+        scheduled: 'calls_scheduled',
+        done: 'calls_done',
+        sales: 'sales_count',
+        revenue: 'sales_value',
+      };
+
+      const insertData: Record<string, unknown> = {
+        user_id: userId,
+        funnel_id: f.funnel_id,
+        date: periodEnd,
+        created_by: userId,
+        [fieldMap[field]]: delta,
+      };
+
+      const { error } = await supabase.from('funnel_daily_data').insert(insertData as any);
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ['funnels-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['funnel-report'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-by-person-product'] });
+      toast.success('Valor atualizado!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar valor');
+    }
+  };
+
+  return (
+    <TableRow>
+      <TableCell className="font-medium">{f.funnel_name}</TableCell>
+      <TableCell className="text-right">
+        <EditableCell value={Number(f.total_leads)} onSave={(v) => handleSave('leads', v)} disabled={!canEdit} />
+      </TableCell>
+      <TableCell className="text-right">
+        <EditableCell value={Number(f.total_qualified)} onSave={(v) => handleSave('qualified', v)} disabled={!canEdit} />
+      </TableCell>
+      <TableCell className="text-right">
+        <EditableCell value={Number(f.total_calls_scheduled)} onSave={(v) => handleSave('scheduled', v)} disabled={!canEdit} />
+      </TableCell>
+      <TableCell className="text-right">
+        <EditableCell value={Number(f.total_calls_done)} onSave={(v) => handleSave('done', v)} disabled={!canEdit} />
+      </TableCell>
+      <TableCell className="text-right">
+        <EditableCell value={Number(f.total_sales)} onSave={(v) => handleSave('sales', v)} disabled={!canEdit} />
+      </TableCell>
+      <TableCell className="text-right">
+        <EditableCell value={Number(f.total_revenue)} onSave={(v) => handleSave('revenue', v)} disabled={!canEdit} isCurrency />
+      </TableCell>
+      <TableCell className="text-right font-semibold">{Number(f.conversion_rate).toFixed(1)}%</TableCell>
+    </TableRow>
   );
 }
