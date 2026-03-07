@@ -15,7 +15,6 @@ import { SDRMetricsDialog } from '@/components/dashboard/sdr/SDRMetricsDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { SDRMetricsDialog } from '@/components/dashboard/sdr/SDRMetricsDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
